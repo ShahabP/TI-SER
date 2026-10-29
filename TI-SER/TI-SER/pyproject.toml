@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ti-ser"
+version = "1.0.0"
+description = "Theory-Inspired Neural Networks for Prosodic Speech Emotion Recognition (PsyCNN / PsyTransformer)"
+requires-python = ">=3.10"
+dependencies = [
+  "numpy",
+  "librosa",
+  "scikit-learn",
+  "matplotlib",
+  "tensorflow>=2.12",
+  "pillow",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[project.scripts]
+ti-ser = "ti_ser.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
