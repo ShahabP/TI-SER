@@ -1,0 +1,50 @@
+# Default experiment configuration matching the paper
+
+data:
+  ravdess_root: data/RAVDESS
+  tess_root: data/TESS
+  crema_root: data/CREMA-D
+  max_frames: 174
+  sample_rate: 16000
+  seven_class: true
+  train_ratio: 0.65
+  val_ratio: 0.15
+  num_workers: 4
+
+model:
+  name: psyCNN          # psyCNN | psyTransformer
+  input_dim: 120
+  num_classes: 7
+  # Transformer-specific
+  d_model: 128
+  n_layers: 3
+  n_heads: 4
+  d_ff: 256
+  max_len: 174
+
+loss:
+  mode: va              # va | pad (experiments use va)
+  lambda_dim: 0.5
+  lambda_int: 0.3
+  lambda_phase: 0.2
+  lambda_ce: 1.0
+  lambda_focal: 0.5
+  focal_alpha: 0.25
+  focal_gamma: 2.0
+  phase_delta: 0.05
+  phase_eps: 0.1
+
+train:
+  epochs: 20
+  batch_size: 32
+  lr: 1.0e-3
+  weight_decay: 1.0e-4
+  warmup_epochs: 5
+  seed: 42
+  use_amp: false
+  augmentation: true
+
+experiment:
+  name: default
+  output_dir: results
+  seeds: [42, 43, 44, 45, 46]   # five seeds for main results
