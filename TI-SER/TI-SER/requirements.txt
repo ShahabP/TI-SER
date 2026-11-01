@@ -1,6 +1,0 @@
-numpy
-librosa
-scikit-learn
-matplotlib
-tensorflow>=2.12
-pillow
