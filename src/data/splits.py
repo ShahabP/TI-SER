@@ -56,6 +56,52 @@ def speaker_disjoint_split(
     return {k: np.where(np.isin(speakers, v))[0].astype(int) for k, v in groups.items()}
 
 
+# Explicit three-fold RAVDESS speaker-disjoint partitions matching Table B8
+# (16 train / 4 val / 4 test actors). Actor ids are the two-digit RAVDESS ids.
+# Fold index is derived from seed % 3 so that seeds 42, 43, 44 map to folds 0, 1, 2.
+RAVDESS_SPEAKER_FOLDS = [
+    {  # fold 0
+        "train": ["01", "02", "03", "04", "05", "06", "07", "08",
+                  "09", "10", "11", "12", "13", "14", "15", "16"],
+        "val":   ["17", "18", "19", "20"],
+        "test":  ["21", "22", "23", "24"],
+    },
+    {  # fold 1
+        "train": ["01", "02", "03", "04", "05", "06", "07", "08",
+                  "17", "18", "19", "20", "21", "22", "23", "24"],
+        "val":   ["09", "10", "11", "12"],
+        "test":  ["13", "14", "15", "16"],
+    },
+    {  # fold 2
+        "train": ["09", "10", "11", "12", "13", "14", "15", "16",
+                  "17", "18", "19", "20", "21", "22", "23", "24"],
+        "val":   ["01", "02", "03", "04"],
+        "test":  ["05", "06", "07", "08"],
+    },
+]
+
+
+def ravdess_speaker_fold_split(
+    speakers: Sequence, fold: int = 0,
+) -> Dict[str, np.ndarray]:
+    """Fixed 16/4/4 speaker-disjoint split for RAVDESS (Table B8).
+
+    ``speakers`` are the full ids produced by datasets.speaker_id (e.g. 'ravdess_12').
+    """
+    speakers = np.asarray([str(s) for s in speakers])
+    fold = int(fold) % len(RAVDESS_SPEAKER_FOLDS)
+    groups = RAVDESS_SPEAKER_FOLDS[fold]
+    # Match either bare two-digit ids or the 'ravdess_XX' form used by speaker_id.
+    def _match(ids):
+        bare = set(ids)
+        full = {f"ravdess_{i}" for i in ids}
+        return bare | full
+    return {
+        k: np.where(np.isin(speakers, list(_match(v))))[0].astype(int)
+        for k, v in groups.items()
+    }
+
+
 def make_split(strata, speakers=None, mode: str = "stratified",
                train_ratio=0.65, val_ratio=0.15, seed=42) -> Dict[str, np.ndarray]:
     if mode == "stratified":
@@ -63,6 +109,11 @@ def make_split(strata, speakers=None, mode: str = "stratified",
     if mode == "speaker_disjoint":
         if speakers is None:
             raise ValueError("speaker_disjoint split needs speaker ids")
+        # Prefer the fixed Table-B8 folds for RAVDESS (speaker ids start with 'ravdess_').
+        sample = next(iter(speakers), "")
+        if str(sample).startswith("ravdess_"):
+            # Use seed to select fold so that seeds 42/43/44 give the three folds.
+            return ravdess_speaker_fold_split(speakers, fold=seed % 3)
         return speaker_disjoint_split(speakers, train_ratio, val_ratio, seed)
     raise ValueError(f"unknown split mode: {mode}")
 

@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
 """
-Download helpers for RAVDESS, TESS (and optionally CREMA-D).
+Download helpers for RAVDESS, TESS (and CREMA-D documentation).
 
 RAVDESS Speech subset is freely available from Zenodo.
 TESS is available from the Toronto Emotional Speech Set page / Kaggle / Zenodo.
+CREMA-D is not redistributed here; download it manually from the official source
+(https://github.com/CheyneyComputerScience/CREMA-D or the project website) and
+place the AudioWAV files under data/CREMA-D/ (or the path given by --out).
 
 Usage
 -----
   python scripts/download_data.py --corpus ravdess --out data/RAVDESS
   python scripts/download_data.py --corpus tess    --out data/TESS
+  python scripts/download_data.py --corpus crema   --out data/CREMA-D
   python scripts/download_data.py --corpus all
 """
 
@@ -84,11 +88,37 @@ def download_tess(out_dir: Path):
     print("TESS target directory:", out_dir)
 
 
+def download_crema(out_dir: Path):
+    """
+    CREMA-D is not auto-downloaded (licence / registration). Document the
+    expected layout so the rest of the pipeline can load it.
+    Expected: out_dir contains (or has a subdirectory with) *.wav files named
+    like 1001_DFA_ANG_XX.wav (actor_sentence_emotion_intensity).
+    Official source: https://github.com/CheyneyComputerScience/CREMA-D
+    """
+    out_dir.mkdir(parents=True, exist_ok=True)
+    n_wav = len(list(out_dir.rglob("*.wav")))
+    if n_wav > 0:
+        print(f"CREMA-D appears present under {out_dir} ({n_wav} wav files).")
+    else:
+        print(
+            f"[manual] CREMA-D is not distributed by this script.\n"
+            f"  1. Obtain the dataset from the official CREMA-D project\n"
+            f"     (https://github.com/CheyneyComputerScience/CREMA-D).\n"
+            f"  2. Place the AudioWAV (or equivalent) files under:\n"
+            f"       {out_dir}\n"
+            f"  File names should follow the pattern ACTOR_SENTENCE_EMO_XX.wav\n"
+            f"  (e.g. 1001_DFA_ANG_XX.wav). Six emotion classes are used\n"
+            f"  (angry, disgust, fear, happy, neutral, sad)."
+        )
+    print("CREMA-D target directory:", out_dir)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--corpus",
-        choices=["ravdess", "tess", "all"],
+        choices=["ravdess", "tess", "crema", "all"],
         default="all",
     )
     parser.add_argument("--out", type=str, default="data")
@@ -99,6 +129,8 @@ def main():
         download_ravdess(root / "RAVDESS")
     if args.corpus in ("tess", "all"):
         download_tess(root / "TESS")
+    if args.corpus in ("crema", "all"):
+        download_crema(root / "CREMA-D")
 
 
 if __name__ == "__main__":

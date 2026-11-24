@@ -38,7 +38,7 @@ loss:
   phase_eps: 0.1
 
 train:
-  epochs: 20
+  epochs: 30
   batch_size: 32
   lr: 1.0e-3
   weight_decay: 1.0e-4

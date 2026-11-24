@@ -31,9 +31,12 @@ Expected layout:
 ```
 data/RAVDESS/Audio_Speech_Actors_01-24/...
 data/TESS/...   # emotion folders (OAF_*, YAF_*)
+data/CREMA-D/...  # AudioWAV/ (manual install; see scripts/download_data.py)
 ```
 
 Features (40 MFCC + Δ + ΔΔ, energy) are cached on first load.
+
+**Training budgets (matching the manuscript):** primary experiments 30 epochs; CREMA-D actor-disjoint 12 epochs; ablations 15 epochs.
 
 ## Quick start
 
@@ -109,7 +112,7 @@ docs/REVIEWER_CHANGES.md
 | Features | 40 MFCC + Δ + ΔΔ (D=120); energy used only as envelope for prototypes |
 | Prototypes | Fixed VA anchors (Russell / Mehrabian ordering) |
 | Loss | L = L_cls + λ_dim L_dim + λ_int L_int + λ_phase L_phase, with L_cls = λ_ce·CE + λ_focal·focal |
-| Schedule | Adam 1e-3, 5-epoch warmup + cosine decay, 20 epochs |
+| Schedule | Adam 1e-3, 5-epoch warmup + cosine decay; primary 30 epochs, CREMA-D 12, ablations 15 |
 
 Default loss weights: `λ_dim=0.5`, `λ_int=0.3`, `λ_phase=0.2`. Splits are utterance-level and
 therefore **not speaker-independent** unless `split_mode: speaker_disjoint` is used.

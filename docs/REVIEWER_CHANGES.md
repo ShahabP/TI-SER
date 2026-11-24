@@ -13,7 +13,7 @@ are listed in `results/summary/excluded_runs.txt` by the aggregator.
 | Random permutation instead of stratification | `build_splits` used `RandomState.permutation` | `src/data/splits.py::stratified_split` (per class, per corpus in `combined`); optional `split_mode: speaker_disjoint` | `tests/test_splits_and_stats.py` |
 | Training-only normalisation not reproduced | no normalisation existed in the scripts (`FeatureNormalizer` was never used) | `compute_train_stats` over the training split only; statistics fingerprint stored in every record | `tests/test_no_leakage.py`, `run_record.json → normalization` |
 | Leave-corpus-out ignored `lambda_ce`/`lambda_focal`, had no normalisation or augmentation | separate script with its own, inconsistent set-up | now goes through the same `run_experiment`; source-train statistics are applied to the target | `run_record.json` |
-| Other bugs found | `parse_tess` used a loose `endswith`; `classification_report` crashed when a class was absent (e.g. CREMA-D has no *surprise*); ablation used 15 epochs / 3 warm-up vs 20 / 5 in main runs | exact last-token parsing; fixed label set; ablations inherit the main config | – |
+| Other bugs found | `parse_tess` used a loose `endswith`; `classification_report` crashed when a class was absent (e.g. CREMA-D has no *surprise*); ablation epochs previously mismatched | exact last-token parsing; fixed label set; ablations use 15 epochs (paper protocol) while primary uses 30 | – |
 
 ## Major issue 2 – run-level records
 Each run writes `results/<group>/<run_id>/`:
@@ -50,8 +50,18 @@ target test set.
 * `report.md` repeats a caution about low-power paired tests with few seeds; with 5 seeds the
   smallest possible two-sided Wilcoxon p is 0.0625, so use `--seeds 42,...,51` for tighter claims.
 
-## Not verified here
-The environment used to prepare these changes had no PyTorch, audio data or network access.
-The split/normalisation/statistics code and leakage tests were executed (torch-stubbed for the
-dataset-view logic); full training runs were **not** executed. Please run `./reproduce.sh`
-(or `python scripts/smoke_test.py && python -m pytest tests`) before using any number.
+## Training budgets and CREMA-D / speaker-disjoint (manuscript alignment)
+* Primary epoch budget: 30 (configs/default.yaml, README).
+* CREMA-D actor-disjoint experiment: six classes, seeds 42–44, 12 epochs, speaker-disjoint splits
+  (`scripts/run_experiments.py --only crema`).
+* Ablations match the paper: CNN, seeds 42–44, RAVDESS + TESS; Transformer, seed 42, RAVDESS; 15 epochs.
+* Explicit three-fold RAVDESS speaker-disjoint partitions (16/4/4) matching Table B8 are in
+  `src/data/splits.py` (`RAVDESS_SPEAKER_FOLDS` / `ravdess_speaker_fold_split`); selected when
+  `split_mode: speaker_disjoint` and corpus is RAVDESS.
+* `scripts/aggregate_results.py` exports descriptive paired differences by default
+  (`paired_differences.csv`); inferential tests are optional (`--inferential`).
+* `reproduce.sh` runs primary, ablations, and CREMA-D stages.
+* CREMA-D download is documented for manual installation in `scripts/download_data.py`.
+
+Please run `./reproduce.sh` (or `python scripts/smoke_test.py && python -m pytest tests`) to
+regenerate results with the updated budgets and protocols.

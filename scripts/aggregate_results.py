@@ -3,13 +3,14 @@
 
 Reads every ``results/**/run_record.json`` and writes to ``results/summary/``:
 
-  per_run.csv        one row per run (model, corpus, variant, seed, acc, F1, split/norm fingerprints)
-  summary.csv        mean +/- SD over seeds per condition
-  paired_tests.csv   each variant vs ``categorical`` on the SAME seeds/splits:
-                     mean difference, 95% CI, paired t-test, Wilcoxon, Cohen's d_z,
-                     wins/ties/losses, Holm-adjusted p within each comparison family
-  report.md          the same as readable tables with the evaluation protocol in each caption
-  excluded_runs.txt  records NOT produced by this pipeline version (historical / unverified)
+  per_run.csv              one row per run (model, corpus, variant, seed, acc, F1, fingerprints)
+  summary.csv              mean +/- SD over seeds per condition
+  paired_differences.csv   descriptive paired differences vs ``categorical`` (Appendix B7 style):
+                           mean Δ, 95% CI, wins/ties/losses (default export)
+  paired_tests.csv         optional inferential tests (t-test, Wilcoxon, Holm, d_z) when
+                           ``--inferential`` is passed
+  report.md                readable tables with the evaluation protocol in each caption
+  excluded_runs.txt        records NOT produced by this pipeline version (historical / unverified)
 
 Pairs are only formed when split fingerprint, normalisation fingerprint and
 training/model config are identical, i.e. a genuinely matched comparison.
@@ -99,6 +100,8 @@ def caption(r):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--results", default="results")
+    ap.add_argument("--inferential", action="store_true",
+                    help="also compute t-test / Wilcoxon / Holm (optional; not part of the default report)")
     a = ap.parse_args()
     rdir = Path(a.results)
     out = rdir / "summary"
@@ -129,7 +132,7 @@ def main():
     for _, r in records:
         groups[cond_key(r)][r["variant"]][r["seed"]] = r
 
-    summary_rows, test_rows, md = [], [], ["# Results summary\n"]
+    summary_rows, desc_rows, test_rows, md = [], [], [], ["# Results summary\n"]
     for cond, by_var in sorted(groups.items()):
         group, protocol, model, tag = cond
         any_rec = next(iter(next(iter(by_var.values())).values()))
@@ -145,7 +148,7 @@ def main():
                       f"{f1.mean():.2f} ± {sd(f1):.2f} |")
 
         if BASELINE not in by_var:
-            md.append("\n*No categorical baseline for this condition; no paired test possible.*")
+            md.append("\n*No categorical baseline for this condition; no paired differences.*")
             continue
         base_runs = by_var[BASELINE]
         fam = []
@@ -159,43 +162,64 @@ def main():
             for metric in METRICS:
                 b = np.array([base_runs[s]["test"][metric] for s in seeds]) * 100
                 o = np.array([runs[s]["test"][metric] for s in seeds]) * 100
-                fam.append((var, metric, paired_stats(b, o)))
-        for metric in METRICS:
-            items = [x for x in fam if x[1] == metric]
-            pv = np.array([x[2]["t_p"] for x in items])
-            ok = ~np.isnan(pv)
-            adj = np.full(len(pv), np.nan)
-            if ok.any():
-                adj[ok] = holm(pv[ok])
-            for (var, m, st), ap_ in zip(items, adj):
-                test_rows.append([group, protocol, model, tag, var, m, st["n_pairs"], st["mean_diff"],
-                                  st["ci_low"], st["ci_high"], st["t_p"], ap_, st["wilcoxon_p"],
-                                  st["dz"], st["wins"], st["ties"], st["losses"]])
+                st = paired_stats(b, o)
+                fam.append((var, metric, st))
+                # Descriptive paired differences (Appendix B7 style) always exported
+                desc_rows.append([group, protocol, model, tag, var, metric, st["n_pairs"],
+                                  st["mean_diff"], st["ci_low"], st["ci_high"],
+                                  st["wins"], st["ties"], st["losses"]])
         if fam:
-            md.append(f"\n**Paired difference vs `{BASELINE}`** (same seeds, splits, init, batch order; "
-                      "percentage points; Holm-adjusted across variants within each metric):\n")
-            md.append("| Variant | Metric | n | Δ mean | 95% CI | p (t) | p Holm | p (Wilcoxon) | d_z | W/T/L |"
-                      "\n|---|---|---|---|---|---|---|---|---|---|")
-            for row in [r for r in test_rows if r[:4] == [group, protocol, model, tag]]:
-                md.append(f"| {row[4]} | {row[5]} | {row[6]} | {row[7]:+.2f} | "
-                          f"[{row[8]:+.2f}, {row[9]:+.2f}] | {row[10]:.3f} | {row[11]:.3f} | "
-                          f"{row[12]:.3f} | {row[13]:+.2f} | {row[14]}/{row[15]}/{row[16]} |")
-            md.append("\n*With few seeds, p-values have low power (Wilcoxon cannot go below 2/2^n); "
-                      "treat small, inconsistent differences as inconclusive.*")
+            md.append(f"\n**Descriptive paired difference vs `{BASELINE}`** "
+                      "(same seeds, splits, init, batch order; percentage points):\n")
+            md.append("| Variant | Metric | n | Δ mean | 95% CI | W/T/L |"
+                      "\n|---|---|---|---|---|---|")
+            for var, metric, st in fam:
+                md.append(f"| {var} | {metric} | {st['n_pairs']} | {st['mean_diff']:+.2f} | "
+                          f"[{st['ci_low']:+.2f}, {st['ci_high']:+.2f}] | "
+                          f"{st['wins']}/{st['ties']}/{st['losses']} |")
+            if a.inferential:
+                for metric in METRICS:
+                    items = [x for x in fam if x[1] == metric]
+                    pv = np.array([x[2]["t_p"] for x in items])
+                    ok = ~np.isnan(pv)
+                    adj = np.full(len(pv), np.nan)
+                    if ok.any():
+                        adj[ok] = holm(pv[ok])
+                    for (var, m, st), ap_ in zip(items, adj):
+                        test_rows.append([group, protocol, model, tag, var, m, st["n_pairs"],
+                                          st["mean_diff"], st["ci_low"], st["ci_high"],
+                                          st["t_p"], ap_, st["wilcoxon_p"], st["dz"],
+                                          st["wins"], st["ties"], st["losses"]])
+                md.append("\n*Inferential tests (optional, enabled with --inferential):*")
+                md.append("| Variant | Metric | n | Δ mean | 95% CI | p (t) | p Holm | p (Wilcoxon) | d_z | W/T/L |"
+                          "\n|---|---|---|---|---|---|---|---|---|---|")
+                for row in [r for r in test_rows if r[:4] == [group, protocol, model, tag]]:
+                    md.append(f"| {row[4]} | {row[5]} | {row[6]} | {row[7]:+.2f} | "
+                              f"[{row[8]:+.2f}, {row[9]:+.2f}] | {row[10]:.3f} | {row[11]:.3f} | "
+                              f"{row[12]:.3f} | {row[13]:+.2f} | {row[14]}/{row[15]}/{row[16]} |")
+            md.append("\n*With few seeds, treat small or inconsistent differences as descriptive only.*")
 
     with open(out / "summary.csv", "w", newline="") as f:
         w = csv.writer(f)
         w.writerow(["group", "protocol", "model", "corpus", "variant", "n_seeds",
                     "acc_mean", "acc_sd", "f1_mean", "f1_sd"])
         w.writerows(summary_rows)
-    with open(out / "paired_tests.csv", "w", newline="") as f:
+    # Default export: descriptive paired differences (Appendix B7)
+    with open(out / "paired_differences.csv", "w", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["group", "protocol", "model", "corpus", "variant", "metric", "n_pairs", "mean_diff",
-                    "ci_low", "ci_high", "p_ttest", "p_holm", "p_wilcoxon", "cohen_dz",
-                    "wins", "ties", "losses"])
-        w.writerows(test_rows)
+        w.writerow(["group", "protocol", "model", "corpus", "variant", "metric", "n_pairs",
+                    "mean_diff", "ci_low", "ci_high", "wins", "ties", "losses"])
+        w.writerows(desc_rows)
+    if a.inferential and test_rows:
+        with open(out / "paired_tests.csv", "w", newline="") as f:
+            w = csv.writer(f)
+            w.writerow(["group", "protocol", "model", "corpus", "variant", "metric", "n_pairs",
+                        "mean_diff", "ci_low", "ci_high", "p_ttest", "p_holm", "p_wilcoxon",
+                        "cohen_dz", "wins", "ties", "losses"])
+            w.writerows(test_rows)
     (out / "report.md").write_text("\n".join(md) + "\n")
-    print(f"Wrote {out}/per_run.csv, summary.csv, paired_tests.csv, report.md "
+    extra = ", paired_tests.csv" if a.inferential and test_rows else ""
+    print(f"Wrote {out}/per_run.csv, summary.csv, paired_differences.csv{extra}, report.md "
           f"({len(records)} runs, {len(excluded)} excluded)")
 
 
