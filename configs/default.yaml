@@ -26,13 +26,13 @@ model:
   max_len: 174
 
 loss:
-  mode: va              # va | pad (experiments use va)
+  mode: va
   lambda_dim: 0.5
   lambda_int: 0.3
   lambda_phase: 0.2
   lambda_ce: 1.0
-  lambda_focal: 0.5
-  focal_alpha: 0.25
+  lambda_focal: 1.0      
+  focal_alpha: 0.2         
   focal_gamma: 2.0
   phase_delta: 0.05
   phase_eps: 0.1
